@@ -56,7 +56,10 @@ fn main() -> Result<(), ureq::Error> {
                             "y" => {
                                 manga_db.add_whitelist(url);
                             }
-                            "n" => manga_db.add_blacklist(url),
+                            "n" => {
+                                manga_db.add_blacklist(url);
+                                history.remove(url);
+                            }
                             _ => {
                                 println!("Please either answer with 'y' or 'n'");
                                 continue;
