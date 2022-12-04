@@ -1,6 +1,7 @@
 use clap::{Parser, Subcommand};
 use crabquery::Document;
 use directories::ProjectDirs;
+use log::info;
 use rusqlite::{Connection, Result};
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
@@ -10,6 +11,7 @@ use std::io::Write;
 use temp_file::TempFile;
 
 fn main() -> Result<(), ureq::Error> {
+    env_logger::init();
     let cli = Cli::parse();
 
     match &cli.command {
@@ -33,6 +35,10 @@ fn main() -> Result<(), ureq::Error> {
                         continue;
                     }
                 }
+                info!(
+                    "history insert '{}' '{:?}'",
+                    chapter.url, chapter.chapter_number
+                );
                 history.insert(chapter.url, chapter.chapter_number);
             }
             let manga_db = Database::new();
@@ -74,7 +80,9 @@ fn main() -> Result<(), ureq::Error> {
                 match MangaPage::get(url) {
                     Ok(manga) => {
                         let last_available_chapter = manga.last_chapter();
+                        info!("last_available_chapter: '{:?}'", last_available_chapter);
                         let last_read_chapter = Chapter::from(url, &chapter_id.number);
+                        info!("last_read_chapter: '{:?}'", last_read_chapter);
                         if last_read_chapter.chapter_number < last_available_chapter.chapter_number
                         {
                             // For now just print the last read chapter
@@ -100,6 +108,7 @@ struct MangaPage {
 
 impl MangaPage {
     fn get(url: &str) -> Result<Self, ureq::Error> {
+        info!("get '{}'", url);
         let body: String = ureq::get(url).call()?.into_string()?;
         let document = Document::from(body);
         Ok(Self {
@@ -109,12 +118,20 @@ impl MangaPage {
     }
 
     fn last_chapter(&self) -> Chapter {
-        let sel = self
-            .document
-            .select("div.tab-content > div > ul > li > span > a");
+        let mut sel = self.document.select("div.tab-content > div > ul > li");
+        loop {
+            let el = sel
+                .first()
+                .expect(format!("Couldn't grab last chapter from {}", self.url).as_str());
+            if el.tag().unwrap() == "a" {
+                break;
+            }
+            sel = el.children();
+        }
         let el = sel
             .first()
             .expect(format!("Couldn't grab last chapter from {}", self.url).as_str());
+        info!("last_chapter '{}'", el.attr("href").unwrap());
         Chapter::new(el.attr("href").unwrap())
     }
 }
@@ -140,6 +157,7 @@ fn sanatize_url(url: &mut String) {
     }
 }
 
+#[derive(Debug)]
 struct Chapter {
     url: String,
     chapter_number: ChapterNumber,
@@ -172,6 +190,7 @@ impl Chapter {
     }
 }
 
+#[derive(Debug)]
 struct ChapterNumber {
     number: String,
 }
